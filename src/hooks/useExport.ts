@@ -27,10 +27,10 @@ export default () => {
   const defaultFontSize = 16
 
   const ratioPx2Inch = computed(() => {
-    return 96 * (viewportSize.value / 960)
+    return 100 
   })
   const ratioPx2Pt = computed(() => {
-    return 96 / 72 * (viewportSize.value / 960)
+    return 100 / 72 
   })
 
   const exporting = ref(false)
@@ -440,9 +440,10 @@ export default () => {
     // 设置pptx版式
     let ratio = viewportRatio.value
     if (_slides && width && height) {
-      // eslint-disable-next-line no-console
-      console.log('CUSTOM LAYOUT')
+
       ratio = height / width
+      // eslint-disable-next-line no-console
+      console.log('Ratio:', ratio)
       const pptxWidth = width / 100
       const pptxHeight = height / 100
       pptx.defineLayout({ name: 'CUSTOM', width: pptxWidth, height: pptxHeight })
@@ -483,8 +484,8 @@ export default () => {
               data: background.image.src,
               x: 0,
               y: 0,
-              w: viewportSize.value / ratioPx2Inch.value,
-              h: viewportSize.value * viewportRatio.value / ratioPx2Inch.value,
+              w: ratio / ratioPx2Inch.value,
+              h: ratio * ratio / ratioPx2Inch.value,
             })
           }
           else if (isBase64Image(background.image.src)) {
@@ -564,6 +565,8 @@ export default () => {
             w: el.width / ratioPx2Inch.value,
             h: el.height / ratioPx2Inch.value,
           }
+          // eslint-disable-next-line no-console
+          console.log('el.options:', options)
           if (isBase64Image(el.src)) options.data = el.src
           else options.path = el.src
 
@@ -595,7 +598,11 @@ export default () => {
               w: (endX - startX) / ratioPx2Inch.value * originW / ratioPx2Inch.value,
               h: (endY - startY) / ratioPx2Inch.value * originH / ratioPx2Inch.value,
             }
+            // eslint-disable-next-line no-console
+            console.log('options sizing:', options.sizing)
           }
+          // eslint-disable-next-line no-console
+          console.log('options after clip:', options)
 
           pptxSlide.addImage(options)
         }
