@@ -39,7 +39,7 @@ function onFileChange(e: Event) {
 
 function exportSlides() {
   if (!slides.value) return
-  exportPPTX(slides.value, true, false)
+  exportPPTX(slides.value.slides, true, false)
 }
 </script>
 

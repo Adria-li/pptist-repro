@@ -583,6 +583,7 @@ export interface PPTLatexElement extends PPTBaseElement {
   strokeWidth: number
   viewBox: [number, number]
   fixedRatio: boolean
+  base64ref?: string
 }
 
 /**

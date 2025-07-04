@@ -6,7 +6,7 @@ import pptxgen from 'pptxgenjs'
 import tinycolor from 'tinycolor2'
 import { toPng, toJpeg } from 'html-to-image'
 import { useSlidesStore } from '@/store'
-import type { PPTElementOutline, PPTElementShadow, PPTElementLink, Slide, PPTShapeElement } from '@/types/slides'
+import type { PPTElementOutline, PPTElementShadow, PPTElementLink, Slide, PPTShapeElement, PPTLatexElement} from '@/types/slides'
 import { getElementRange, getLineElementPath, getTableSubThemeColor } from '@/utils/element'
 import { type AST, toAST } from '@/utils/htmlParser'
 import { type SvgPoints, toPoints } from '@/utils/svgPathParser'
@@ -90,6 +90,33 @@ export default () => {
     return template.content.firstElementChild as SVGSVGElement
   }
 
+  function latexToSVGElement(el: PPTLatexElement): SVGSVGElement {
+    const width = el.width
+    const height = el.height
+    const stroke = el.color || '#333'
+    const strokeWidth = el.strokeWidth || 2
+    const fill = 'none'
+    const path = el.path || ''
+    const viewBox = el.viewBox || [width, height]
+    const scaleX = width / viewBox[0]
+    const scaleY = height / viewBox[1]
+  
+    const svgString = `
+      <svg overflow="visible" width="${width}" height="${height}" stroke="${stroke}" stroke-width="${strokeWidth}" fill="${fill}" stroke-linecap="round" stroke-linejoin="round">
+        <g transform="scale(${scaleX}, ${scaleY}) translate(0,0) matrix(1,0,0,1,0,0)">
+          <path d="${path}" />
+        </g>
+      </svg>
+    `.trim()
+  
+    // eslint-disable-next-line no-console
+    console.log('latex svg string:', svgString)
+
+    const template = document.createElement('template')
+    template.innerHTML = svgString
+    return template.content.firstElementChild as SVGSVGElement
+  }
+
   // 导出JSON文件
   const exportJSON = () => {
     const slidesForExport = JSON.parse(JSON.stringify(slides.value))
@@ -98,8 +125,12 @@ export default () => {
       for (const el of slide.elements) {
         if (el.type === 'shape' && el.special && el.path && el.viewBox) {
           const svgElement = shapeToSVGElement(el)
-          // eslint-disable-next-line no-console
-          console.log('svgElement:', svgElement.outerHTML)
+          el.base64ref = svg2Base64(svgElement)
+        }
+        if (el.type === 'latex') {
+          // TODO: 暂未遇到类型未latex的元素，不确定是否能正常转换
+          const svgElement = latexToSVGElement(el)
+          
           el.base64ref = svg2Base64(svgElement)
         }
       }
@@ -429,39 +460,24 @@ export default () => {
   }
 
   // 导出PPTX文件
-  const exportPPTX = (_slides: { width: number; height: number; slides: Slide[]; [key: string]: any }, masterOverwrite: boolean, ignoreMedia: boolean) => {
+  const exportPPTX = (_slides: Slide[], masterOverwrite: boolean, ignoreMedia: boolean) => {
     // eslint-disable-next-line no-console
     console.log('exportPPTX')
     exporting.value = true
     // 创建pptx示例（自定义库）
     const pptx = new pptxgen()
-    const { width, height, slides, title } = _slides
 
-    // 设置pptx版式
-    let ratio = viewportRatio.value
-    if (_slides && width && height) {
-
-      ratio = height / width
-      // eslint-disable-next-line no-console
-      console.log('Ratio:', ratio)
-      const pptxWidth = width / 100
-      const pptxHeight = height / 100
-      pptx.defineLayout({ name: 'CUSTOM', width: pptxWidth, height: pptxHeight })
-      pptx.layout = 'CUSTOM'
-    }
-    else if (Math.abs(ratio - 0.625) < 0.01) pptx.layout = 'LAYOUT_16x10'
-    else if (Math.abs(ratio - 0.75) < 0.01) pptx.layout = 'LAYOUT_4x3'
-    else if (Math.abs(ratio - 0.7071) < 0.01) {
+    if (viewportRatio.value === 0.625) pptx.layout = 'LAYOUT_16x10'
+    else if (viewportRatio.value === 0.75) pptx.layout = 'LAYOUT_4x3'
+    else if (viewportRatio.value === 0.70710678) {
       pptx.defineLayout({ name: 'A3', width: 10, height: 7.0710678 })
       pptx.layout = 'A3'
     }
-    else if (Math.abs(ratio - 1.4142) < 0.01) {
+    else if (viewportRatio.value === 1.41421356) {
       pptx.defineLayout({ name: 'A3_V', width: 10, height: 14.1421356 })
       pptx.layout = 'A3_V'
     }
     else pptx.layout = 'LAYOUT_16x9'
-    // eslint-disable-next-line no-console
-    console.log('pptx.layout:', pptx.layout)
 
     if (masterOverwrite) {
       const { color: bgColor, alpha: bgAlpha } = formatColor(theme.value.backgroundColor)
@@ -472,7 +488,7 @@ export default () => {
     }
 
     // 遍历幻灯片
-    for (const slide of _slides.slides) {
+    for (const slide of _slides) {
       // 添加幻灯片
       const pptxSlide = pptx.addSlide()
 
@@ -484,8 +500,8 @@ export default () => {
               data: background.image.src,
               x: 0,
               y: 0,
-              w: ratio / ratioPx2Inch.value,
-              h: ratio * ratio / ratioPx2Inch.value,
+              w: viewportSize.value / ratioPx2Inch.value,
+              h: viewportSize.value * viewportSize.value / ratioPx2Inch.value,
             })
           }
           else if (isBase64Image(background.image.src)) {
@@ -608,16 +624,8 @@ export default () => {
         }
 
         else if (el.type === 'shape') {
-          // eslint-disable-next-line no-console
-          console.log('el.special:', el.special)
-          // eslint-disable-next-line no-console
-          console.log('el.base64ref:', el.base64ref)
           // todo: 这里需要判断是否是base64ref
           if (el.special && el.base64ref) {
-            // const svgRef = document.querySelector(`.thumbnail-list .base-element-${el.id} svg`) as HTMLElement
-            // // eslint-disable-next-line no-console
-            // console.log('svgRef got from the web element:', svgRef.outerHTML)
-            // const base64Ref = svg2Base64(svgRef)
             const options: pptxgen.ImageProps = {
               data: el.base64ref,
               x: el.left / ratioPx2Inch.value,
@@ -926,10 +934,9 @@ export default () => {
         
         else if (el.type === 'latex') {
           const svgRef = document.querySelector(`.thumbnail-list .base-element-${el.id} svg`) as HTMLElement
-          const base64SVG = svg2Base64(svgRef)
 
           const options: pptxgen.ImageProps = {
-            data: base64SVG,
+            data: el.base64ref,
             x: el.left / ratioPx2Inch.value,
             y: el.top / ratioPx2Inch.value,
             w: el.width / ratioPx2Inch.value,
@@ -968,7 +975,7 @@ export default () => {
     }
 
     setTimeout(() => {
-      pptx.writeFile({ fileName: `${_slides.title}.pptx` }).then(() => exporting.value = false).catch(() => {
+      pptx.writeFile({ fileName: `${title.value}.pptx` }).then(() => exporting.value = false).catch(() => {
         exporting.value = false
         message.error('导出失败')
       })
